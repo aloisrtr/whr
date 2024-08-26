@@ -24,7 +24,7 @@ where
     pub fn new(player: P, w2: f64, virtual_games: u32) -> Self {
         Self {
             player,
-            w2: w2.sqrt() * (10f64.ln() / 400f64).powf(2f64), // Converts from elo to whr
+            w2: w2 * (10f64.ln() / 400f64).powf(2f64), // Converts from elo to whr
             timesteps: vec![],
             virtual_games,
         }
