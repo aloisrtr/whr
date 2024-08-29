@@ -9,7 +9,6 @@ fn test_whr_output() {
         .with_game(0, 1, Some(0), 3, None)
         .with_game(0, 1, Some(0), 4, None)
         .with_game(0, 1, Some(0), 4, None)
-        .with_iterations(50)
         .build();
 
     let result_0 = whr

@@ -71,9 +71,12 @@ where
     pub fn build(mut self) -> HashMap<P, Vec<Rating>> {
         let mut iterations = 0;
         let start = Instant::now();
-        loop {
+        'refine: loop {
             for _ in 0..self.batch_size.get() {
-                self.refine_ratings();
+                let delta = self.refine_ratings();
+                if delta <= self.epsilon {
+                    break 'refine;
+                }
                 iterations += 1;
             }
 
@@ -89,6 +92,7 @@ where
                 }
             }
         }
+        self.update_uncertainety();
         HashMap::from_iter(
             self.ratings
                 .iter()
@@ -465,8 +469,11 @@ where
     }
 
     /// Refines the players' ratings, corresponds to one iteration of Newton's method.
-    fn refine_ratings(&mut self) {
+    /// Returns the delta between the updated ratings and previous ones.
+    fn refine_ratings(&mut self) -> f64 {
         let players = self.player_index.values().cloned().collect::<Vec<_>>();
+        let mut delta = 0f64;
+        let mut diffs = 1;
         for player in players {
             self.compute_normalizing_terms(player);
 
@@ -513,7 +520,78 @@ where
                 // Update ratings
                 for (rating, diff) in self.ratings.get_mut(&player).unwrap().iter_mut().zip(x) {
                     rating.rating.0 -= diff;
+                    delta += (diff.abs() - delta).abs() / diffs as f64;
+                    diffs += 1;
                 }
+            }
+        }
+        delta
+    }
+
+    fn update_uncertainety(&mut self) {
+        let players = self.player_index.values().cloned().collect::<Vec<_>>();
+        for player in players {
+            let steps = self.get_timestep_count(player);
+            if steps == 0 {
+                continue;
+            }
+
+            let normal_variance = self.normal_variance(player);
+            let hessian = self.hessian_matrix(player, &normal_variance);
+
+            let mut a = vec![0f64; steps];
+            let mut b = vec![0f64; steps];
+            let mut d = vec![0f64; steps];
+            d[0] = hessian[0];
+            if steps > 1 {
+                b[0] = hessian[1];
+            }
+
+            for i in 1..steps {
+                a[i] = hessian[i * steps + i - 1] / d[i - 1];
+                d[i] = hessian[i * steps + 1] - a[i] * b[i - 1];
+                if i < steps - 1 {
+                    b[i] = hessian[i * steps + i + 1];
+                }
+            }
+
+            let mut ap = vec![0f64; steps];
+            let mut bp = vec![0f64; steps];
+            let mut dp = vec![0f64; steps];
+            dp[steps - 1] = hessian[steps * steps - 1];
+            bp[steps - 1] = hessian[steps * steps - 2];
+            for i in (0..steps - 1).rev() {
+                ap[i] = hessian[i * steps + i + 1] / dp[i + 1];
+                dp[i] = hessian[i * steps + i] - ap[i] * bp[i + 1];
+                if i > 0 {
+                    bp[i] = hessian[i * steps + i - 1];
+                }
+            }
+            let mut variance = vec![0f64; steps];
+            for i in 0..steps - 1 {
+                variance[i] = dp[i + 1] / (b[i] * bp[i + 1] - d[i] * dp[i + 1]);
+            }
+            variance[steps - 1] = -1f64 / d[steps - 1];
+
+            let mut covariance = vec![0f64; steps * steps];
+            for row in 0..steps {
+                for col in 0..steps {
+                    if row == col {
+                        covariance[row * steps + col] = variance[row];
+                    } else if col != 0 && row == col - 1 {
+                        covariance[row * steps + col] = -a[col] * variance[col];
+                    }
+                }
+            }
+
+            for (i, rating) in self
+                .ratings
+                .get_mut(&player)
+                .unwrap()
+                .iter_mut()
+                .enumerate()
+            {
+                rating.uncertainety = covariance[i * steps + i]
             }
         }
     }
