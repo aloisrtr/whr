@@ -12,22 +12,24 @@ fn test_whr_output() {
         .with_iterations(50)
         .build();
 
-    println!(
-        "{:?}",
-        whr.get(&0)
-            .unwrap()
-            .read()
-            .unwrap()
-            .get_ratings()
-            .collect::<Vec<_>>()
-    );
-    println!(
-        "{:?}",
-        whr.get(&1)
-            .unwrap()
-            .read()
-            .unwrap()
-            .get_ratings()
-            .collect::<Vec<_>>()
-    )
+    let result_0 = whr
+        .get(&0)
+        .unwrap()
+        .read()
+        .unwrap()
+        .get_ratings()
+        .map(|(d, r): (u32, f64)| (d, r.round() as i64))
+        .collect::<Vec<_>>();
+
+    let result_1 = whr
+        .get(&1)
+        .unwrap()
+        .read()
+        .unwrap()
+        .get_ratings()
+        .map(|(d, r): (u32, f64)| (d, r.round() as i64))
+        .collect::<Vec<_>>();
+
+    assert_eq!(&result_0, &[(1, 92), (2, 94), (3, 95), (4, 96)]);
+    assert_eq!(&result_1, &[(1, -92), (2, -94), (3, -95), (4, -96)]);
 }
