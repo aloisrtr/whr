@@ -1,4 +1,4 @@
-use crate::WhrBuilder;
+use crate::{Rating, WhrBuilder};
 
 #[test]
 fn test_whr_output() {
@@ -15,19 +15,14 @@ fn test_whr_output() {
     let result_0 = whr
         .get(&0)
         .unwrap()
-        .read()
-        .unwrap()
-        .get_ratings()
-        .map(|(d, r): (u32, f64)| (d, r.round() as i64))
+        .iter()
+        .map(|r| (r.timestep, r.elo().0.round() as i64))
         .collect::<Vec<_>>();
-
     let result_1 = whr
         .get(&1)
         .unwrap()
-        .read()
-        .unwrap()
-        .get_ratings()
-        .map(|(d, r): (u32, f64)| (d, r.round() as i64))
+        .iter()
+        .map(|r| (r.timestep, r.elo().0.round() as i64))
         .collect::<Vec<_>>();
 
     assert_eq!(&result_0, &[(1, 92), (2, 94), (3, 95), (4, 96)]);
