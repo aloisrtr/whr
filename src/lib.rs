@@ -1,5 +1,56 @@
 //! # Whole-History Rating
 
+//! Implementation of Rémi Coulom's [Whole History Rating (WHR) algorithm](https://www.remi-coulom.fr/WHR/)
+//! as a Rust library.
+//!
+//! It notably supports:
+//! - handicaps (first player advantage)
+//! - draws
+//!
+//! WHR is used to rate players in competitive games, akin to the [Elo](https://en.wikipedia.org/wiki/Elo_rating_system)
+//! or [TrueSkill](https://en.wikipedia.org/wiki/TrueSkill) systems. It can estimate
+//! the probability of winning between two players even if they have never competed
+//! against one another. It is more accurate than say the Elo system, at the cost
+//! of requiring more computation.
+//!
+//! WHR is notably used in Go, Warcraft 3, Renju, and is even used in some sports!
+//!
+//! ## Future work
+//! I hope to generalize the library further, notably by supporting:
+//! - games with more than two players
+//! - teams
+//!
+//! as was stated to be possible in Rémi Coulom's paper introducing WHR.
+//!
+//! ## Installation
+//! The library can be used in any Cargo project by running:
+//! ```sh
+//! cargo add whr
+//! ```
+//! or by adding the following to your `Cargo.toml`:
+//! ```toml
+//! [dependencies]
+//! whr = "0.1"
+//! ```
+//! ## Exemple usage
+//! The library works following the [builder pattern](https://rust-unofficial.github.io/patterns/patterns/creational/builder.html).
+//! ```rust
+//! use whr::WhrBuilder;
+//!
+//! let whr = WhrBuilder::default()
+//!   .with_iterations(50) // Maximum number of iterations for the algorithm to converge.
+//!   .with_epsilon(1e-5) // Target stability between iterations
+//!   // Register games, with:
+//!   // - two named players,
+//!   // - an optional winner,
+//!   // - a timestep,
+//!   // - and optional handicap (first player advantage)
+//!   .with_game("alice", "bob", Some("bob"), 1, None)
+//!   .with_game("alice", "bob", None, 2, None)
+//!   .with_game("bob", "alice", Some("alice"), 2, None)
+//!   .build();
+//! ```
+//! This returns a [`Whr`] object with ratings for each player by timestep.
 mod game;
 mod rating;
 #[cfg(test)]
@@ -17,19 +68,52 @@ use itertools::Itertools;
 use rating::{EloRating, GammaRating, Rating};
 use timestep::TimeStep;
 
+/// WHR ratings for players, with additional API to access probability of winning
+/// and other useful information.
+#[derive(Clone)]
+pub struct Whr<P> {
+    ratings: HashMap<P, Vec<Rating>>,
+}
+impl<P> Whr<P>
+where
+    P: std::hash::Hash + Eq + Clone,
+{
+    /// Returns the player's ratings.
+    pub fn get_player_ratings(&self, player: &P) -> Option<&[Rating]> {
+        self.ratings.get(player).map(|r| r.as_slice())
+    }
+
+    /// Returns the rating of a given player at a specific time if the player
+    /// played any game at this timestep.
+    pub fn rating(&self, player: &P, time: usize) -> Option<Rating> {
+        self.ratings
+            .get(player)?
+            .binary_search_by_key(&time, |r| r.timestep)
+            .ok()
+            .map(|i| self.ratings.get(player).unwrap()[i])
+    }
+
+    /// Computes the probability of winning for `p1` against `p2` at a given timestep.
+    /// Returns `None` if any of the players are not registered.
+    pub fn probability_of_winning(&self, p1: &P, p2: &P, time: usize) -> Option<f64> {
+        let p1_rating = self.rating(p1, time)?.gamma();
+        let p2_rating = self.rating(p2, time)?.gamma();
+        Some((p1_rating / (p1_rating + p2_rating)).0)
+    }
+}
+
 /// Builder API for [`Whr`], with easy ways to add input data and set the number of
 /// iterations for refinement.
 #[derive(Clone)]
 pub struct WhrBuilder<P> {
     // Mapping from players to identifiers
-    next_player_index: usize,
     player_index: HashMap<P, usize>,
 
     // Mapping from games to identifiers
     games: Vec<Game>,
     // Timesteps information for each player
-    timesteps: HashMap<usize, Vec<TimeStep>>,
-    ratings: HashMap<usize, Vec<Rating>>,
+    timesteps: Vec<Vec<TimeStep>>,
+    ratings: Vec<Vec<Rating>>,
 
     iterations: Option<NonZeroU32>,
     epsilon: f64,
@@ -37,16 +121,14 @@ pub struct WhrBuilder<P> {
     batch_size: NonZeroU32,
     w2: f64,
     virtual_games: u32,
-    handicap: EloRating,
 }
 impl<P> Default for WhrBuilder<P> {
     fn default() -> Self {
         Self {
-            next_player_index: 0,
             player_index: HashMap::new(),
             games: vec![],
-            timesteps: HashMap::new(),
-            ratings: HashMap::new(),
+            timesteps: vec![],
+            ratings: vec![],
 
             iterations: None,
             epsilon: 1e-3,
@@ -54,13 +136,12 @@ impl<P> Default for WhrBuilder<P> {
             batch_size: unsafe { NonZeroU32::new_unchecked(10) },
             w2: 300f64 * (10f64.ln() / 400f64).powf(2f64),
             virtual_games: 2,
-            handicap: EloRating(0f64),
         }
     }
 }
 impl<P> WhrBuilder<P>
 where
-    P: std::hash::Hash + Eq + Copy + std::fmt::Debug + std::fmt::Display,
+    P: std::hash::Hash + Eq + Clone,
 {
     /// Creates a new default builder.
     pub fn new() -> Self {
@@ -68,7 +149,8 @@ where
     }
 
     /// Uses the currently inputted parameters to compute ratings.
-    pub fn build(mut self) -> HashMap<P, Vec<Rating>> {
+    /// This does not consume the builder.
+    pub fn build(mut self) -> Whr<P> {
         let mut iterations = 0;
         let start = Instant::now();
         'refine: loop {
@@ -93,17 +175,13 @@ where
             }
         }
         self.update_uncertainety();
-        HashMap::from_iter(
-            self.ratings
-                .iter()
-                .map(|(p, r)| (*self.get_player_id(*p).unwrap(), r.clone())),
-        )
-    }
-
-    fn get_player_id(&self, player: usize) -> Option<&P> {
-        self.player_index
-            .iter()
-            .find_map(|(p, i)| if *i == player { Some(p) } else { None })
+        Whr {
+            ratings: HashMap::from_iter(
+                self.player_index
+                    .iter()
+                    .map(|(p, &i)| (p.clone(), self.ratings[i].clone())),
+            ),
+        }
     }
 
     /// Adds a game record to the builder.
@@ -113,13 +191,15 @@ where
         p2: P,
         winner: Option<P>,
         time: usize,
-        handicap: Option<f64>,
+        handicap: Option<EloRating>,
     ) -> Self {
-        assert_ne!(p1, p2, "Players cannot be the same for both sides");
+        assert!(p1 != p2, "Players cannot be the same for both sides");
         assert!(
-            winner.map(|p| p == p1 || p == p2).unwrap_or(true),
-            "Winner must be one of the players, {:?} is not one of {p1:?} or {p2:?}",
-            winner.unwrap()
+            winner
+                .as_ref()
+                .map(|p| p == &p1 || p == &p2)
+                .unwrap_or(true),
+            "Winner must be one of the players",
         );
 
         // Record players
@@ -133,7 +213,7 @@ where
             p1: p1_index,
             p2: p2_index,
             winner: winner_index,
-            handicap: handicap.unwrap_or(0f64),
+            handicap: handicap.unwrap_or(EloRating(0f64)),
         });
 
         if let Some(winner_index) = winner_index {
@@ -162,8 +242,14 @@ where
     }
 
     /// Adds multiple games to the builder at once.
-    pub fn with_games(mut self) -> Self {
-        todo!()
+    pub fn with_games(
+        mut self,
+        games: impl Iterator<Item = (P, P, Option<P>, usize, Option<EloRating>)>,
+    ) -> Self {
+        for (p1, p2, winner, time, handicap) in games {
+            self = self.with_game(p1, p2, winner, time, handicap)
+        }
+        self
     }
 
     /// Sets the number of iterations. By default, the algorithm iterates until
@@ -206,12 +292,6 @@ where
         self
     }
 
-    /// Sets the handicap aka first player advantage.
-    pub fn with_handicap(mut self, handicap: EloRating) -> Self {
-        self.handicap = handicap;
-        self
-    }
-
     /// Sets the number of virtual games to stabilize ratings.
     pub fn with_virtual_games(mut self, virtual_games: u32) -> Self {
         self.virtual_games = virtual_games;
@@ -226,9 +306,13 @@ where
         if let Some(&i) = self.player_index.get(&player) {
             i
         } else {
-            self.next_player_index += 1;
-            self.player_index.insert(player, self.next_player_index - 1);
-            self.next_player_index - 1
+            debug_assert_eq!(self.player_index.len(), self.ratings.len());
+            debug_assert_eq!(self.player_index.len(), self.timesteps.len());
+            let player_index = self.player_index.len();
+            self.player_index.insert(player, player_index);
+            self.ratings.push(vec![]);
+            self.timesteps.push(vec![]);
+            player_index
         }
     }
 
@@ -240,97 +324,69 @@ where
     }
 
     /// Gets or inserts a new timestep for the given player.
-    fn get_timestep(&mut self, player_index: usize, time: usize) -> &mut TimeStep {
-        let timesteps = self.timesteps.entry(player_index).or_default();
-        let ratings = self.ratings.entry(player_index).or_default();
-
-        let i = match timesteps.binary_search_by_key(&time, |t| t.timestep) {
+    fn get_timestep(&mut self, player: usize, time: usize) -> &mut TimeStep {
+        let i = match self.timesteps[player].binary_search_by_key(&time, |t| t.timestep) {
             Ok(i) => i,
             Err(i) => {
-                timesteps.insert(i, TimeStep::new(time));
+                self.timesteps[player].insert(i, TimeStep::new(time));
                 let rating = Rating::new(
                     time,
                     if i == 0 {
                         GammaRating(1f64).into()
                     } else {
-                        ratings[i - 1].rating
+                        self.ratings[player][i - 1].rating
                     },
                 );
-                ratings.insert(i, rating);
+                self.ratings[player].insert(i, rating);
                 i
             }
         };
-        &mut timesteps[i]
+        &mut self.timesteps[player][i]
     }
+    /// Iterator over all timesteps for a given player.
     fn get_timesteps(&self, player: usize) -> impl Iterator<Item = usize> + '_ {
-        self.ratings
-            .get(&player)
-            .unwrap()
-            .iter()
-            .map(|r| r.timestep)
+        self.ratings[player].iter().map(|r| r.timestep)
     }
+    /// Number of timesteps for a given player.
     fn get_timestep_count(&self, player: usize) -> usize {
-        self.ratings.get(&player).unwrap().len()
+        self.ratings[player].len()
     }
 
     /// Computes the normalizing terms for all sets of games/players.
     pub fn compute_normalizing_terms(&mut self, player: usize) {
-        let adjusted_gamma_rating = |ratings: &Vec<Rating>, time: usize, handicap: EloRating| {
-            let result = ratings
+        let adjusted_gamma_rating = |game: usize, player: usize, time: usize| {
+            let game = self.games[game];
+            let opponent = game.opponent(player);
+            let result = self.ratings[opponent]
                 .binary_search_by_key(&time, |t| t.timestep)
-                .map(|i| ratings[i].elo())
+                .map(|i| self.ratings[opponent][i].elo())
                 .unwrap()
-                + handicap;
+                + game.handicap(player);
 
             10f64.powf(result.0 / 400f64)
         };
 
-        let timesteps = self.timesteps.get_mut(&player).unwrap();
         // Account for virtual games
-        for (i, timestep) in timesteps.iter_mut().enumerate() {
+        for (i, timestep) in self.timesteps[player].iter_mut().enumerate() {
             let time = timestep.timestep;
 
             timestep.won_game_terms.clear();
             for &game in &timestep.won_games {
-                let game = self.games[game];
-                let opponent = game.opponent(player);
-                let opponent_gamma = adjusted_gamma_rating(
-                    self.ratings
-                        .get(&opponent)
-                        .expect("Opponent {opponent} was not registered"),
-                    time,
-                    self.handicap,
-                );
+                let opponent_gamma = adjusted_gamma_rating(game, player, time);
                 timestep
                     .won_game_terms
                     .push([1f64, 0f64, 1f64, opponent_gamma])
             }
             timestep.lost_game_terms.clear();
             for &game in &timestep.lost_games {
-                let game = self.games[game];
-                let opponent = game.opponent(player);
-                let opponent_gamma = adjusted_gamma_rating(
-                    self.ratings
-                        .get(&opponent)
-                        .expect("Opponent {opponent} was not registerd"),
-                    time,
-                    self.handicap,
-                );
+                let opponent_gamma = adjusted_gamma_rating(game, player, time);
                 timestep
                     .lost_game_terms
                     .push([0f64, opponent_gamma, 1f64, opponent_gamma])
             }
             timestep.drawn_game_terms.clear();
             for &game in &timestep.drawn_games {
-                let game = self.games[game];
-                let opponent = game.opponent(player);
-                let opponent_gamma = adjusted_gamma_rating(
-                    self.ratings
-                        .get(&opponent)
-                        .expect("Opponent {opponent} was not registerd"),
-                    time,
-                    self.handicap,
-                );
+                let opponent_gamma = adjusted_gamma_rating(game, player, time);
                 timestep
                     .drawn_game_terms
                     .push([0.5f64, 0.5 * opponent_gamma, 1f64, opponent_gamma])
@@ -380,7 +436,7 @@ where
 
     /// Computes the gradient for each day.
     fn gradient(&self, player: usize, normal_variance: &[f64]) -> Vec<f64> {
-        let ratings = self.ratings.get(&player).unwrap();
+        let ratings = &self.ratings[player];
         let steps = self.get_timestep_count(player);
 
         self.get_timesteps(player)
@@ -397,27 +453,6 @@ where
                 self.timestep_dlog_likelihood(player, time) + prior
             })
             .collect()
-    }
-
-    /// Computes the log likelihood for this timestamp.
-    fn timestep_log_likelihood(&self, player: usize, time: usize) -> f64 {
-        let mut sum = 0f64;
-        let (timestep, rating) = self.get_player_information(player, time);
-        let gamma = rating.gamma().0;
-        for [a, _, c, d] in &timestep.won_game_terms {
-            sum += (a * gamma).ln();
-            sum -= (c * gamma + d).ln();
-        }
-        for [_, b, c, d] in &timestep.lost_game_terms {
-            sum += b.ln();
-            sum -= (c * gamma + d).ln();
-        }
-        for [a, b, c, d] in &timestep.drawn_game_terms {
-            sum += (a * 2f64 * gamma).ln() * 0.5;
-            sum += (b * 2f64).ln() * 0.5;
-            sum -= (c * gamma + d).ln()
-        }
-        sum
     }
 
     /// Computes the log likelihood's derivative for this timestamp.
@@ -455,17 +490,12 @@ where
         -gamma * sum
     }
 
+    /// Returns the timestep and rating of a given player at a certain time.
     fn get_player_information(&self, player: usize, time: usize) -> (&TimeStep, &Rating) {
-        let i = self
-            .timesteps
-            .get(&player)
-            .unwrap()
+        let i = self.ratings[player]
             .binary_search_by_key(&time, |t| t.timestep)
             .unwrap();
-        (
-            &self.timesteps.get(&player).unwrap()[i],
-            &self.ratings.get(&player).unwrap()[i],
-        )
+        (&self.timesteps[player][i], &self.ratings[player][i])
     }
 
     /// Refines the players' ratings, corresponds to one iteration of Newton's method.
@@ -477,12 +507,12 @@ where
         for player in players {
             self.compute_normalizing_terms(player);
 
-            let ratings_len = self.ratings.get(&player).unwrap().len();
+            let ratings_len = self.get_timestep_count(player);
             if ratings_len == 1 {
                 // 1D Newton method
                 let dlog = self.timestep_dlog_likelihood(player, 0);
                 let dlog2 = self.timestep_dlog2_likelihood(player, 0);
-                self.ratings.get_mut(&player).unwrap()[0].rating.0 -= dlog / dlog2;
+                self.ratings[player][0].rating.0 -= dlog / dlog2;
             } else if self.timesteps.len() > 1 {
                 // ND Newton method
                 let normal_variance = self.normal_variance(player);
@@ -518,7 +548,7 @@ where
                 }
 
                 // Update ratings
-                for (rating, diff) in self.ratings.get_mut(&player).unwrap().iter_mut().zip(x) {
+                for (rating, diff) in self.ratings[player].iter_mut().zip(x) {
                     rating.rating.0 -= diff;
                     delta += (diff.abs() - delta).abs() / diffs as f64;
                     diffs += 1;
@@ -528,6 +558,7 @@ where
         delta
     }
 
+    /// Updates the uncertainety of ratings for each player.
     fn update_uncertainety(&mut self) {
         let players = self.player_index.values().cloned().collect::<Vec<_>>();
         for player in players {
@@ -584,13 +615,7 @@ where
                 }
             }
 
-            for (i, rating) in self
-                .ratings
-                .get_mut(&player)
-                .unwrap()
-                .iter_mut()
-                .enumerate()
-            {
+            for (i, rating) in self.ratings[player].iter_mut().enumerate() {
                 rating.uncertainety = covariance[i * steps + i]
             }
         }

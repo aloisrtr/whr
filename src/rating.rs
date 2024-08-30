@@ -63,6 +63,12 @@ impl std::ops::Div for GammaRating {
         Self(self.0 / rhs.0)
     }
 }
+impl std::ops::Neg for GammaRating {
+    type Output = Self;
+    fn neg(self) -> Self::Output {
+        Self(-self.0)
+    }
+}
 
 #[derive(Copy, Clone, PartialEq, PartialOrd, Debug)]
 pub struct WhrRating(pub(crate) f64);
@@ -103,6 +109,12 @@ impl std::ops::Div for WhrRating {
     type Output = Self;
     fn div(self, rhs: Self) -> Self::Output {
         Self(self.0 / rhs.0)
+    }
+}
+impl std::ops::Neg for WhrRating {
+    type Output = Self;
+    fn neg(self) -> Self::Output {
+        Self(-self.0)
     }
 }
 
@@ -146,5 +158,11 @@ impl std::ops::Div for EloRating {
     type Output = Self;
     fn div(self, rhs: Self) -> Self::Output {
         Self(self.0 / rhs.0)
+    }
+}
+impl std::ops::Neg for EloRating {
+    type Output = Self;
+    fn neg(self) -> Self::Output {
+        Self(-self.0)
     }
 }

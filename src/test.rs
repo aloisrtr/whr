@@ -1,8 +1,7 @@
-use crate::{Rating, WhrBuilder};
+use crate::WhrBuilder;
 
 #[test]
 fn test_whr_output() {
-    env_logger::init();
     let whr = WhrBuilder::default()
         .with_game(0, 1, Some(1), 1, None)
         .with_game(0, 1, Some(0), 2, None)
@@ -11,18 +10,18 @@ fn test_whr_output() {
         .with_game(0, 1, Some(0), 4, None)
         .build();
 
-    let result_0 = whr
-        .get(&0)
+    let result_0: Vec<_> = whr
+        .get_player_ratings(&0)
         .unwrap()
         .iter()
         .map(|r| (r.timestep, r.elo().0.round() as i64))
-        .collect::<Vec<_>>();
-    let result_1 = whr
-        .get(&1)
+        .collect();
+    let result_1: Vec<_> = whr
+        .get_player_ratings(&1)
         .unwrap()
         .iter()
         .map(|r| (r.timestep, r.elo().0.round() as i64))
-        .collect::<Vec<_>>();
+        .collect();
 
     assert_eq!(&result_0, &[(1, 92), (2, 94), (3, 95), (4, 96)]);
     assert_eq!(&result_1, &[(1, -92), (2, -94), (3, -95), (4, -96)]);
