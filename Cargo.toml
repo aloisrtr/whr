@@ -2,9 +2,13 @@
 name = "whr"
 description = "Implementation of Rémi Coulom's Whole-History Rating (WHR) algorithm for Rust"
 license = "MIT OR Apache-2.0"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 authors = ["Aloïs Rautureau"]
+readme = "readme.md"
+repository = "https://github.com/aloisrtr/whr"
+keywords = ["rating", "games", "statistics"]
+categories = ["algorithms", "mathematics"]
 
 [dependencies]
 itertools = "0.13"
