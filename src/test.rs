@@ -14,13 +14,13 @@ fn test_whr_output() {
         .get_player_ratings(&0)
         .unwrap()
         .iter()
-        .map(|r| (r.timestep, r.elo().0.round() as i64))
+        .map(|r| (r.timestep, r.elo().round() as i64))
         .collect();
     let result_1: Vec<_> = whr
         .get_player_ratings(&1)
         .unwrap()
         .iter()
-        .map(|r| (r.timestep, r.elo().0.round() as i64))
+        .map(|r| (r.timestep, r.elo().round() as i64))
         .collect();
 
     assert_eq!(&result_0, &[(1, 92), (2, 94), (3, 95), (4, 96)]);

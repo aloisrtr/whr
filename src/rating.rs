@@ -13,11 +13,15 @@ impl Rating {
         }
     }
 
-    pub fn elo(&self) -> EloRating {
-        self.rating.into()
+    pub fn whr(&self) -> f64 {
+        self.rating.0
     }
-    pub fn gamma(&self) -> GammaRating {
-        self.rating.into()
+
+    pub fn elo(&self) -> f64 {
+        EloRating::from(self.rating).0
+    }
+    pub fn gamma(&self) -> f64 {
+        GammaRating::from(self.rating).0
     }
 }
 

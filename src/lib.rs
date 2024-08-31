@@ -98,7 +98,7 @@ where
     pub fn probability_of_winning(&self, p1: &P, p2: &P, time: usize) -> Option<f64> {
         let p1_rating = self.rating(p1, time)?.gamma();
         let p2_rating = self.rating(p2, time)?.gamma();
-        Some((p1_rating / (p1_rating + p2_rating)).0)
+        Some(p1_rating / (p1_rating + p2_rating))
     }
 }
 
@@ -361,9 +361,9 @@ where
                 .binary_search_by_key(&time, |t| t.timestep)
                 .map(|i| self.ratings[opponent][i].elo())
                 .unwrap()
-                + game.handicap(player);
+                + game.handicap(player).0;
 
-            10f64.powf(result.0 / 400f64)
+            10f64.powf(result / 400f64)
         };
 
         // Account for virtual games
@@ -459,7 +459,7 @@ where
     fn timestep_dlog_likelihood(&self, player: usize, time: usize) -> f64 {
         let mut sum = 0f64;
         let (timestep, rating) = self.get_player_information(player, time);
-        let gamma = rating.gamma().0;
+        let gamma = rating.gamma();
         for terms in [
             &timestep.won_game_terms,
             &timestep.lost_game_terms,
@@ -477,7 +477,7 @@ where
     fn timestep_dlog2_likelihood(&self, player: usize, time: usize) -> f64 {
         let mut sum = 0f64;
         let (timestep, rating) = self.get_player_information(player, time);
-        let gamma = rating.gamma().0;
+        let gamma = rating.gamma();
         for terms in [
             &timestep.won_game_terms,
             &timestep.lost_game_terms,
