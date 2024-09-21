@@ -510,8 +510,9 @@ where
             let ratings_len = self.get_timestep_count(player);
             if ratings_len == 1 {
                 // 1D Newton method
-                let dlog = self.timestep_dlog_likelihood(player, 0);
-                let dlog2 = self.timestep_dlog2_likelihood(player, 0);
+                let step = self.get_timesteps(player).next().unwrap();
+                let dlog = self.timestep_dlog_likelihood(player, step);
+                let dlog2 = self.timestep_dlog2_likelihood(player, step);
                 self.ratings[player][0].rating.0 -= dlog / dlog2;
             } else if self.timesteps.len() > 1 {
                 // ND Newton method
@@ -589,20 +590,22 @@ where
             let mut ap = vec![0f64; steps];
             let mut bp = vec![0f64; steps];
             let mut dp = vec![0f64; steps];
-            dp[steps - 1] = hessian[steps * steps - 1];
-            bp[steps - 1] = hessian[steps * steps - 2];
-            for i in (0..steps - 1).rev() {
-                ap[i] = hessian[i * steps + i + 1] / dp[i + 1];
-                dp[i] = hessian[i * steps + i] - ap[i] * bp[i + 1];
-                if i > 0 {
-                    bp[i] = hessian[i * steps + i - 1];
-                }
-            }
             let mut variance = vec![0f64; steps];
-            for i in 0..steps - 1 {
-                variance[i] = dp[i + 1] / (b[i] * bp[i + 1] - d[i] * dp[i + 1]);
+            if steps > 1 {
+                dp[steps - 1] = hessian[steps * steps - 1];
+                bp[steps - 1] = hessian[steps * steps - 2];
+                for i in (0..steps - 1).rev() {
+                    ap[i] = hessian[i * steps + i + 1] / dp[i + 1];
+                    dp[i] = hessian[i * steps + i] - ap[i] * bp[i + 1];
+                    if i > 0 {
+                        bp[i] = hessian[i * steps + i - 1];
+                    }
+                }
+                for i in 0..steps - 1 {
+                    variance[i] = dp[i + 1] / (b[i] * bp[i + 1] - d[i] * dp[i + 1]);
+                }
+                variance[steps - 1] = -1f64 / d[steps - 1];
             }
-            variance[steps - 1] = -1f64 / d[steps - 1];
 
             let mut covariance = vec![0f64; steps * steps];
             for row in 0..steps {
