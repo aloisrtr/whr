@@ -1,13 +1,15 @@
-use crate::WhrBuilder;
+use crate::{MatchRecord, WhrBuilder};
 
 #[test]
 fn test_whr_output() {
     let whr = WhrBuilder::default()
-        .with_game(0, 1, Some(1), 1, None)
-        .with_game(0, 1, Some(0), 2, None)
-        .with_game(0, 1, Some(0), 3, None)
-        .with_game(0, 1, Some(0), 4, None)
-        .with_game(0, 1, Some(0), 4, None)
+        .with_matches([
+            MatchRecord::new(0, 1, Some(1), 1, None).unwrap(),
+            MatchRecord::new(0, 1, Some(0), 2, None).unwrap(),
+            MatchRecord::new(0, 1, Some(0), 3, None).unwrap(),
+            MatchRecord::new(0, 1, Some(0), 4, None).unwrap(),
+            MatchRecord::new(0, 1, Some(0), 4, None).unwrap(),
+        ])
         .build();
 
     let result_0: Vec<_> = whr

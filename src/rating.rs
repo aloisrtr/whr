@@ -1,34 +1,63 @@
+//! # Ratings
+//! Various rating values used by this library.
+//!
+//! The main one you should care about is [`Rating`], as it represents the
+//! values of Whole-History Rating with information about the timestep, rating value
+//! and uncertainety.
+//!
+//! The rest are here for convenience/conversions.
+
+/// Characterizes the rating of a player at a specific timestep.
+///
+/// This includes the [`WhrRating`] in itself, as well as the current uncertainety
+/// regarding that rating.
 #[derive(Copy, Clone, PartialEq, PartialOrd)]
 pub struct Rating {
-    pub timestep: usize,
-    pub rating: WhrRating,
-    pub uncertainety: f64,
+    pub(crate) timestep: usize,
+    pub(crate) rating: WhrRating,
+    pub(crate) uncertainety: f64,
 }
 impl Rating {
-    pub fn new(time: usize, initial: WhrRating) -> Self {
+    /// Creates a new rating given its initial value and timestep.
+    pub(crate) fn new(timestep: usize, initial: WhrRating) -> Self {
         Self {
-            timestep: time,
+            timestep,
             rating: initial,
             uncertainety: 0f64,
         }
     }
 
+    /// Returns the WHR value of this rating.
     pub fn whr(&self) -> f64 {
         self.rating.0
     }
 
+    /// Returns the equivalent Elo rating.
     pub fn elo(&self) -> f64 {
         EloRating::from(self.rating).0
     }
+
+    /// Returns the equivalent gamma rating.
     pub fn gamma(&self) -> f64 {
         GammaRating::from(self.rating).0
     }
 }
 
+/// Represents a gamma rating value.
 #[derive(Copy, Clone, PartialEq, PartialOrd, Debug)]
 pub struct GammaRating(pub(crate) f64);
 impl GammaRating {
     pub fn new(value: f64) -> Self {
+        Self(value)
+    }
+
+    /// Returns this values as a float.
+    pub fn inner(&self) -> f64 {
+        self.0
+    }
+}
+impl From<f64> for GammaRating {
+    fn from(value: f64) -> Self {
         Self(value)
     }
 }
@@ -74,10 +103,21 @@ impl std::ops::Neg for GammaRating {
     }
 }
 
+/// Represents a Whole-History Rating value.
 #[derive(Copy, Clone, PartialEq, PartialOrd, Debug)]
 pub struct WhrRating(pub(crate) f64);
 impl WhrRating {
     pub fn new(value: f64) -> Self {
+        Self(value)
+    }
+
+    /// Returns this values as a float.
+    pub fn inner(&self) -> f64 {
+        self.0
+    }
+}
+impl From<f64> for WhrRating {
+    fn from(value: f64) -> Self {
         Self(value)
     }
 }
@@ -122,10 +162,21 @@ impl std::ops::Neg for WhrRating {
     }
 }
 
+/// Represents an Elo rating value.
 #[derive(Copy, Clone, PartialEq, PartialOrd, Debug)]
 pub struct EloRating(pub(crate) f64);
 impl EloRating {
     pub fn new(value: f64) -> Self {
+        Self(value)
+    }
+
+    /// Returns this values as a float.
+    pub fn inner(&self) -> f64 {
+        self.0
+    }
+}
+impl From<f64> for EloRating {
+    fn from(value: f64) -> Self {
         Self(value)
     }
 }
