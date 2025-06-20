@@ -60,18 +60,19 @@ where
 /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// use whr::{MatchRecord, WhrBuilder};
 ///
-/// let mut whr = WhrBuilder::default()
+/// let mut whr = WhrBuilder::default();
+/// whr
 ///   // Register matches, with:
 ///   // - two named players,
 ///   // - an optional winner,
 ///   // - a timestep,
 ///   // - and optional handicap (first player advantage)
-///   .with_match(MatchRecord::new("alice", "bob", Some("bob"), 1, None)?)
-///   .with_match(MatchRecord::new("alice", "bob", None, 2, None)?)
-///   .with_match(MatchRecord::new("bob", "alice", Some("alice"), 2, None)?)
+///   .add_match(MatchRecord::new("alice", "bob", Some("bob"), 1, None)?)
+///   .add_match(MatchRecord::new("alice", "bob", None, 2, None)?)
+///   .add_match(MatchRecord::new("bob", "alice", Some("alice"), 2, None)?)
 ///
 ///   // You can even add multiple games at once from an iterator
-///   .with_matches([
+///   .add_matches([
 ///     MatchRecord::new("bob", "alice", Some("alice"), 1, None)?,
 ///     MatchRecord::new("alice", "charlie", Some("charlie"), 4, None)?
 ///   ]);
@@ -79,7 +80,7 @@ where
 /// let ratings = whr.build();
 ///
 /// // Then add a new match and recompute the ratings.
-/// whr = whr.with_match(MatchRecord::new("charlie", "bob", None, 2, None)?);
+/// whr.add_match(MatchRecord::new("charlie", "bob", None, 2, None)?);
 /// let new_ratings = whr.build();
 /// # Ok(()) }
 /// ```
@@ -179,7 +180,7 @@ where
     }
 
     /// Adds a [`MatchRecord`] to the history.
-    pub fn with_match(mut self, game: MatchRecord<P>) -> Self {
+    pub fn add_match(&mut self, game: MatchRecord<P>) -> &mut Self {
         let (p1, p2) = game.players();
         // Record players
         let p1_index = self.register_player(p1.clone());
@@ -221,9 +222,9 @@ where
     }
 
     /// Adds multiple matches to the history at once.
-    pub fn with_matches(mut self, matches: impl IntoIterator<Item = MatchRecord<P>>) -> Self {
+    pub fn add_matches(&mut self, matches: impl IntoIterator<Item = MatchRecord<P>>) -> &mut Self {
         for m in matches {
-            self = self.with_match(m)
+            self.add_match(m);
         }
         self
     }
@@ -233,20 +234,20 @@ where
     ///
     /// If a value of 0 is passed, the algorithm considers that it can run an for
     /// an unlimited amount of iterations.
-    pub fn with_iterations(mut self, iterations: u32) -> Self {
+    pub fn set_iterations(&mut self, iterations: u32) -> &mut Self {
         self.iterations = NonZeroU32::new(iterations);
         self
     }
 
     /// Sets the error margin under which the algorithm should consider ratings to be
     /// stabilized. By default, this value is `1e-3`.
-    pub fn with_epsilon(mut self, epsilon: f64) -> Self {
+    pub fn set_epsilon(&mut self, epsilon: f64) -> &mut Self {
         self.epsilon = epsilon;
         self
     }
 
     /// Specifies a maximum duration for the algorithm to run.
-    pub fn with_maximum_duration(mut self, duration: Duration) -> Self {
+    pub fn set_maximum_duration(&mut self, duration: Duration) -> &mut Self {
         self.max_duration = Some(duration);
         self
     }
@@ -256,14 +257,14 @@ where
     /// after every batch of 10 iterations.
     ///
     /// If a value of 0 is passed, the batch size is 1 (no batching).
-    pub fn with_batch_size(mut self, size: u32) -> Self {
+    pub fn set_batch_size(&mut self, size: u32) -> &mut Self {
         self.batch_size = NonZeroU32::new(size).unwrap_or(NonZeroU32::new(1).unwrap());
         self
     }
 
     /// Sets the `w2` parameter, responsible for the variability of ratings over
     /// time. A higher value means that ratings will fluctuate more.
-    pub fn with_w2(mut self, w2: f64) -> Self {
+    pub fn set_w2(&mut self, w2: f64) -> &mut Self {
         self.w2 = w2 * (10f64.ln() / 400f64).powf(2f64); // Converts from elo to whr
         self
     }

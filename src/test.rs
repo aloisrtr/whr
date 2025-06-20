@@ -2,8 +2,9 @@ use crate::{MatchRecord, WhrBuilder};
 
 #[test]
 fn test_whr_output() {
-    let whr = WhrBuilder::default()
-        .with_matches([
+    let mut whr = WhrBuilder::default();
+    let whr = whr
+        .add_matches([
             MatchRecord::new(0, 1, Some(1), 1, None).unwrap(),
             MatchRecord::new(0, 1, Some(0), 2, None).unwrap(),
             MatchRecord::new(0, 1, Some(0), 3, None).unwrap(),
