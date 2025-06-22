@@ -27,8 +27,8 @@ impl Rating {
         }
     }
 
-    /// Returns the WHR value of this rating.
-    pub fn whr(&self) -> f64 {
+    /// Returns the natural value of this rating.
+    pub fn natural(&self) -> f64 {
         self.rating.0
     }
 
@@ -40,6 +40,11 @@ impl Rating {
     /// Returns the equivalent gamma rating.
     pub fn gamma(&self) -> f64 {
         GammaRating::from(self.rating).0
+    }
+
+    /// Returns the uncertainty associated with this rating.
+    pub fn uncertainty(&self) -> f64 {
+        self.uncertainety
     }
 }
 
