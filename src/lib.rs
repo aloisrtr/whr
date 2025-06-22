@@ -274,7 +274,7 @@ where
     /// Every player's initial rating is decided as if they played `2 * virtual_games`
     /// matches against an opponent of rating 0, with `virtual_games` wins and `virtual_games`
     /// draws.
-    pub fn with_virtual_games(mut self, virtual_games: u32) -> Self {
+    pub fn set_virtual_games(&mut self, virtual_games: u32) -> &mut Self {
         self.virtual_games = virtual_games;
         self
     }
